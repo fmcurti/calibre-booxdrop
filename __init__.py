@@ -22,9 +22,23 @@ from calibre_plugins.booxdrop.discovery import discover
 
 plugin_prefs = JSONConfig('plugins/BooxDropDevice')
 plugin_prefs.defaults['base_url'] = 'http://192.168.0.20:8085'
+plugin_prefs.defaults['sd_card_dir'] = ''   # empty = no SD card configured
 
 UID_KEYS = ('deviceUid', 'deviceId', 'uuid', 'serialNumber', 'serial', 'mac', 'id')
-BOOKS_PATH_PREFIX = '/storage/emulated/0/Books/'
+
+
+def _normalize_dir(path):
+    """Strip trailing slashes; empty returns ''."""
+    if not path:
+        return ''
+    return path.rstrip('/')
+
+
+def _path_belongs_to(path, folder):
+    """True iff `path` is under `folder` (folder is a directory)."""
+    if not folder:
+        return False
+    return path == folder or path.startswith(folder + '/')
 
 DISCOVERY_FAIL_THRESHOLD = 5      # consecutive failed probes before scanning (~10s)
 DISCOVERY_COOLDOWN_SECONDS = 60   # don't rescan more often than this
@@ -72,7 +86,7 @@ class BooxDropDevice(DevicePlugin):
     name = 'BooxDrop Device'
     description = 'BooxDrop integration for Calibre'
     author = 'fmcurti'
-    version = (0, 0, 10)
+    version = (0, 0, 12)
     minimum_calibre_version = (6, 0, 0)
     supported_platforms = ['windows', 'osx', 'linux']
 
@@ -87,6 +101,7 @@ class BooxDropDevice(DevicePlugin):
         super().__init__(*a, **k)
         self._lock = threading.RLock()
         self.base_url = normalize_url(plugin_prefs['base_url'])
+        self.sd_card_dir = _normalize_dir(plugin_prefs['sd_card_dir'])
         self.boox_api = BooxDropAPI(self.base_url)
         self._connected = False
         self._model = 'Unknown Model'
@@ -222,18 +237,25 @@ class BooxDropDevice(DevicePlugin):
 
     def total_space(self, end_session=True):
         with self._lock:
-            return [self._total_bytes, 0, 0]
+            card_a = self._total_bytes if self.sd_card_dir else 0
+            return [self._total_bytes, card_a, 0]
 
     def free_space(self, end_session=True):
         with self._lock:
-            return [self._free_bytes, -1, -1]
+            card_a = self._free_bytes if self.sd_card_dir else -1
+            return [self._free_bytes, card_a, -1]
 
     def card_prefix(self, end_session=True):
-        return (None, None)
+        with self._lock:
+            return (self.sd_card_dir or None, None)
 
     def books(self, oncard=None, end_session=True):
         bl = CollectionsBookList(oncard, prefix='/', settings=None)
-        if oncard is not None:
+        with self._lock:
+            sd_dir = self.sd_card_dir
+        if oncard == 'cardb':
+            return bl
+        if oncard == 'carda' and not sd_dir:
             return bl
 
         api, _ = self._get_api()
@@ -252,6 +274,11 @@ class BooxDropDevice(DevicePlugin):
                 continue
             ext = os.path.splitext(path)[1].lower()
             if ext not in allowed:
+                continue
+            on_sd = _path_belongs_to(path, sd_dir)
+            if oncard == 'carda' and not on_sd:
+                continue
+            if oncard is None and on_sd:
                 continue
             seen.add(path)
 
@@ -331,8 +358,16 @@ class BooxDropDevice(DevicePlugin):
         return (model, '1.0', '1.0', '', driveinfo)
 
     def upload_books(self, files, names, on_card=None, end_session=True, metadata=None):
-        debug_print('BOOXDROP: upload_books count=', len(files))
-        api, _ = self._get_api()
+        debug_print('BOOXDROP: upload_books count=', len(files), 'on_card=', on_card)
+        with self._lock:
+            api = self.boox_api
+            sd_dir = self.sd_card_dir
+        if on_card == 'carda':
+            upload_dir = sd_dir or None
+        elif on_card == 'cardb':
+            raise OSError('BooxDrop only supports one SD card slot (card A).')
+        else:
+            upload_dir = None  # let BooxDrop pick its default for main memory
 
         try:
             total_size = sum(os.path.getsize(p) for p in files)
@@ -356,11 +391,10 @@ class BooxDropDevice(DevicePlugin):
             def progress(sent, total, base=base, n=n, dest_name=dest_name):
                 self._report(base + (sent / total) / n, 'Transferring %s' % dest_name)
 
-            ok = api.upload_book(src_path, dest_name, progress=progress)
-            if not ok:
+            saved_path = api.upload_book(src_path, dest_name, dir=upload_dir, progress=progress)
+            if not saved_path:
                 raise OSError('BooxDrop upload failed for %s' % dest_name)
-            device_path = BOOKS_PATH_PREFIX + dest_name
-            locations.append((device_path, on_card))
+            locations.append((saved_path, on_card))
 
         self._report(1.0, 'Transferring books to device...')
         return locations
@@ -416,15 +450,19 @@ class BooxDropDevice(DevicePlugin):
 
     def config_widget(self):
         with self._lock:
-            current = self.base_url
-        return build_config_widget(current)
+            url = self.base_url
+            sd_dir = self.sd_card_dir
+        return build_config_widget(url, sd_dir)
 
     def save_settings(self, config_widget):
         new_url = normalize_url(config_widget.url_edit.text())
+        new_sd = _normalize_dir(config_widget.sd_card_dir_edit.text().strip())
         plugin_prefs['base_url'] = new_url
+        plugin_prefs['sd_card_dir'] = new_sd
 
         with self._lock:
             self.base_url = new_url
+            self.sd_card_dir = new_sd
             self.boox_api = BooxDropAPI(new_url)
 
     def customization_help(self, gui=False):

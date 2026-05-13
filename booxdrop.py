@@ -160,14 +160,33 @@ class BooxDropAPI:
             debug_print('BOOXDROP: fetch_cover failed for', path, '->', e)
             return None
 
-    def upload_book(self, book_path: str, dest_name: str, progress=None) -> bool:
+    def upload_book(self, book_path: str, dest_name: str, dir: str = None, progress=None):
+        """Upload a file via POST /api/storage/upload.
+
+        If `dir` is set, BooxDrop writes the file under that directory (useful
+        for targeting an SD card or a non-default folder). Otherwise BooxDrop
+        defaults to /storage/emulated/0/Books/.
+
+        Returns the device-side absolute path where the file was saved
+        (from the response's `message` field, so collision-renames like
+        `Book_1.epub` are captured correctly), or None on failure.
+        """
         try:
             file_size = os.path.getsize(book_path)
-            prefix = (
+
+            field_parts = []
+            if dir:
+                field_parts.append(
+                    f'--{MULTIPART_BOUNDARY}\r\n'
+                    f'Content-Disposition: form-data; name="dir"\r\n\r\n'
+                    f'{dir}\r\n'.encode()
+                )
+            field_parts.append((
                 f'--{MULTIPART_BOUNDARY}\r\n'
                 f'Content-Disposition: form-data; name="file"; filename="{dest_name}"\r\n'
                 f'Content-Type: application/octet-stream\r\n\r\n'
-            ).encode()
+            ).encode())
+            prefix = b''.join(field_parts)
             suffix = f'\r\n--{MULTIPART_BOUNDARY}--\r\n'.encode()
             total = len(prefix) + file_size + len(suffix)
 
@@ -206,10 +225,18 @@ class BooxDropAPI:
                     progress(sent, total)
 
                 resp = conn.getresponse()
-                resp.read()
-                return resp.status == 200
+                body = resp.read()
+                if resp.status != 200:
+                    return None
+                try:
+                    payload = json.loads(body or b'{}')
+                except ValueError:
+                    payload = {}
+                if not payload.get('successful', True):
+                    return None
+                return payload.get('message')
             finally:
                 conn.close()
         except Exception as e:
             debug_print('BOOXDROP: upload_book failed for', dest_name, '->', e)
-        return False
+        return None

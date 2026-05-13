@@ -22,13 +22,22 @@ def normalize_url(url: str) -> str:
     return url.rstrip('/')
 
 
-def build_config_widget(current_base_url: str) -> QWidget:
+def build_config_widget(current_base_url: str, current_sd_card_dir: str = '') -> QWidget:
     w = QWidget()
     lay = QFormLayout(w)
 
     url_edit = QLineEdit(current_base_url, w)
     url_edit.setPlaceholderText('http://host:port')
     w.url_edit = url_edit
+
+    sd_card_dir_edit = QLineEdit(current_sd_card_dir, w)
+    sd_card_dir_edit.setPlaceholderText('/storage/XXXX-XXXX/Books/   (leave empty if no SD)')
+    sd_card_dir_edit.setToolTip(
+        "Path to a directory on your BOOX SD card. Leave empty if you don't "
+        "have an SD card. When set, Calibre's 'Send to storage card A' menu "
+        "writes there and the on-device pane partitions main memory vs card."
+    )
+    w.sd_card_dir_edit = sd_card_dir_edit
 
     def _validate():
         text = url_edit.text().strip()
@@ -95,4 +104,5 @@ def build_config_widget(current_base_url: str) -> QWidget:
     row_lay.addWidget(test_btn)
 
     lay.addRow('BooxDrop URL', row)
+    lay.addRow('SD card folder', sd_card_dir_edit)
     return w
