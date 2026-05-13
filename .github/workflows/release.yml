@@ -1,0 +1,49 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Extract version from tag
+        id: ver
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Verify __init__.py and Makefile match the tag
+        run: |
+          set -e
+          TAG="${{ steps.ver.outputs.version }}"
+          INIT_VERSION=$(python3 -c "import re; m = re.search(r'version\s*=\s*\((\d+),\s*(\d+),\s*(\d+)\)', open('__init__.py').read()); print('.'.join(m.groups()))")
+          MAKE_VERSION=$(awk -F':= ' '/^VERSION/ {print $2}' Makefile | tr -d ' ')
+          echo "tag:     $TAG"
+          echo "init.py: $INIT_VERSION"
+          echo "Makefile: $MAKE_VERSION"
+          if [ "$INIT_VERSION" != "$TAG" ]; then
+            echo "::error::__init__.py version $INIT_VERSION does not match tag v$TAG"
+            exit 1
+          fi
+          if [ "$MAKE_VERSION" != "$TAG" ]; then
+            echo "::error::Makefile VERSION $MAKE_VERSION does not match tag v$TAG"
+            exit 1
+          fi
+
+      - name: Build plugin ZIP
+        run: make zip
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            "booxdrop-${{ steps.ver.outputs.version }}.zip" \
+            --title "$GITHUB_REF_NAME" \
+            --generate-notes
