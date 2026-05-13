@@ -48,6 +48,41 @@ class BooxDropAPI:
             debug_print('BOOXDROP: get_folders failed for', url, '->', e)
         return []
 
+    def list_media_paths(self, media_type='Document'):
+        """Cheap single-pass enumeration of file paths via /api/media/list,
+        for SD-card auto-detection (no library walk, no metadata)."""
+        offset = 0
+        paths = []
+        while True:
+            args = {
+                'mediaType': media_type,
+                'sortBy': 'CreationTime',
+                'sortOrder': 'Desc',
+                'limit': LIST_PAGE_SIZE,
+                'offset': offset,
+                'refresh': offset == 0,
+            }
+            url = f"{self.base_url}/api/media/list?args={_encode_args(args)}"
+            try:
+                with urllib.request.urlopen(url, timeout=LIST_TIMEOUT) as response:
+                    if response.getcode() != 200:
+                        break
+                    payload = json.loads(response.read())
+            except Exception as e:
+                debug_print('BOOXDROP: list_media_paths failed at offset', offset, '->', e)
+                break
+            batch = payload.get('data', {}).get('list', []) or []
+            if not batch:
+                break
+            for item in batch:
+                p = item.get('path')
+                if p:
+                    paths.append(p)
+            if len(batch) < LIST_PAGE_SIZE:
+                break
+            offset += LIST_PAGE_SIZE
+        return paths
+
     def _library_ids(self) -> list:
         """Return [None, uid1, uid2, ...] — the root plus every library UUID
         we can reach by walking /api/library/tree."""

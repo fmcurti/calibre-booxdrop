@@ -1,6 +1,6 @@
 PLUGIN := booxdrop
 # Keep in sync with the `version = (...)` tuple in __init__.py.
-VERSION := 0.0.12
+VERSION := 0.0.13
 
 ZIP := $(PLUGIN)-$(VERSION).zip
 

@@ -40,6 +40,37 @@ def _path_belongs_to(path, folder):
         return False
     return path == folder or path.startswith(folder + '/')
 
+
+def _detect_sd_card_dir(paths):
+    """Inspect device-side paths and return a best-guess SD-card upload
+    directory, or '' if no external storage is in use.
+
+    Android mounts internal storage at /storage/emulated/0 and SD cards
+    at /storage/<volume-uuid>/. Any path under /storage/* that isn't
+    /storage/emulated/ is therefore external.
+    """
+    sd_books = []
+    sd_root = ''
+    for p in paths or ():
+        if not p.startswith('/storage/'):
+            continue
+        if p.startswith('/storage/emulated/'):
+            continue
+        parts = p.split('/')
+        if len(parts) < 3:
+            continue
+        sd_root = f'/storage/{parts[2]}'
+        sd_books.append(p)
+
+    if not sd_root:
+        return ''
+
+    # Prefer the directory of an actual book on the SD; fall back to
+    # /<mount>/Books (BOOX's convention) when the card is empty.
+    if sd_books:
+        return '/'.join(sd_books[0].split('/')[:-1])
+    return sd_root + '/Books'
+
 DISCOVERY_FAIL_THRESHOLD = 5      # consecutive failed probes before scanning (~10s)
 DISCOVERY_COOLDOWN_SECONDS = 60   # don't rescan more often than this
 
@@ -86,7 +117,7 @@ class BooxDropDevice(DevicePlugin):
     name = 'BooxDrop Device'
     description = 'BooxDrop integration for Calibre'
     author = 'fmcurti'
-    version = (0, 0, 12)
+    version = (0, 0, 13)
     minimum_calibre_version = (6, 0, 0)
     supported_platforms = ['windows', 'osx', 'linux']
 
@@ -229,6 +260,21 @@ class BooxDropDevice(DevicePlugin):
             self._library_uuid = library_uuid or ''
             self._connected_at = datetime.now(timezone.utc)
             self._connected = True
+            need_sd_detect = not self.sd_card_dir
+            api = self.boox_api
+
+        if need_sd_detect:
+            try:
+                paths = api.list_media_paths()
+            except Exception as e:
+                debug_print('BOOXDROP: SD auto-detect probe failed:', e)
+                paths = []
+            sd = _detect_sd_card_dir(paths)
+            if sd:
+                debug_print('BOOXDROP: auto-detected SD card at', sd)
+                with self._lock:
+                    self.sd_card_dir = sd
+                plugin_prefs['sd_card_dir'] = sd
 
     def eject(self):
         debug_print('BOOXDROP: eject')

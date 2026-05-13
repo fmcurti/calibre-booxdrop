@@ -31,11 +31,13 @@ def build_config_widget(current_base_url: str, current_sd_card_dir: str = '') ->
     w.url_edit = url_edit
 
     sd_card_dir_edit = QLineEdit(current_sd_card_dir, w)
-    sd_card_dir_edit.setPlaceholderText('/storage/XXXX-XXXX/Books/   (leave empty if no SD)')
+    sd_card_dir_edit.setPlaceholderText(
+        '(auto-detected on connect — leave empty unless overriding)'
+    )
     sd_card_dir_edit.setToolTip(
-        "Path to a directory on your BOOX SD card. Leave empty if you don't "
-        "have an SD card. When set, Calibre's 'Send to storage card A' menu "
-        "writes there and the on-device pane partitions main memory vs card."
+        "Auto-filled from your BOOX's indexed books the first time you "
+        "connect with an SD card present. Override only if you want uploads "
+        "to land in a specific subfolder of the SD card. Empty = no SD card."
     )
     w.sd_card_dir_edit = sd_card_dir_edit
 
