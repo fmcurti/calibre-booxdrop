@@ -1,26 +1,56 @@
-# Calibre BOOXDrop Plugin
+# Calibre BooxDrop Plugin
 
-A Calibre plugin for sending books to BOOX devices through BOOXDrop.
+A Calibre device plugin for sending books to BOOX e-readers over a local
+network using BooxDrop.
 
 ## Overview
 
-This plugin allows you to wirelessly transfer ebooks from Calibre to your BOOX e-reader device using the BOOXDrop feature. Simply select books in your Calibre library and send them directly to your BOOX device over your local network.
+This plugin makes a BOOX device appear as a wireless device in Calibre
+whenever BooxDrop is enabled on it. Books are streamed in chunks to the
+BOOX device's HTTP API with per-byte progress reporting and a pre-flight
+free-space check.
 
-## Current Limitations
+## Current limitations
 
-- **Local network only**: The plugin currently works only when both Calibre and your BOOX device are on the same local WiFi network
-- **BOOX servers implementation pending**: Future versions will support transfers via BOOX cloud servers for remote access
+- **Local network only.** Calibre and the BOOX device must be on the
+  same LAN. There is no cloud/relay path.
+- **One-way send.** `books()` returns an empty list, so Calibre doesn't
+  know what's already on the device, and `delete_books` / `get_file`
+  are not implemented yet. These require BooxDrop-side list/delete/
+  download endpoints that are not currently available.
 
 ## Installation
 
-1. Download the plugin files
-2. In Calibre, go to Preferences → Plugins → Load plugin from file
-3. Select the plugin file and install
-4. Restart Calibre
+### Released ZIP (when available)
+
+1. Download `booxdrop-<version>.zip` from
+   [GitHub Releases](https://github.com/fmcurti/calibre-booxdrop/releases).
+2. In Calibre: Preferences → Plugins → Load plugin from file → pick the
+   ZIP.
+3. Restart Calibre.
+
+### Build from source
+
+```bash
+git clone https://github.com/fmcurti/calibre-booxdrop
+cd calibre-booxdrop
+make zip                 # produces booxdrop-<version>.zip
+make install             # or: calibre-customize -a booxdrop-<version>.zip
+```
+
+### Live development
+
+```bash
+make dev-install         # equivalent to:
+                         #   calibre-debug -s
+                         #   calibre-customize -b .
+calibre --debug-device-driver
+```
 
 ## Usage
 
-1. Ensure your BOOX device has BOOXDrop enabled and is connected to WiFi
-2. In Calibre, go to Preferences → Plugins → BOOXDrop And set the correct IP address displayed on your BOOX device
-3. You should be able to send books to device seamlessly
-4. Books will appear in your BOOX device library
+1. Enable BooxDrop on the BOOX device (Apps → BooxDrop).
+2. In Calibre: Preferences → Plugins → BooxDrop Device → set the URL
+   shown on the BOOX BooxDrop screen (e.g. `http://192.168.0.20:8085`).
+3. The BOOX appears in Calibre's device toolbar; Send to Device works
+   as with any other device.

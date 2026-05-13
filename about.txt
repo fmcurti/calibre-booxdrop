@@ -1,0 +1,15 @@
+BooxDrop Device for Calibre
+===========================
+
+Send books from Calibre to a BOOX e-reader over your local network using
+the BooxDrop wireless transfer feature built into BOOX devices.
+
+The plugin appears as a wireless device in Calibre's device toolbar
+whenever your BOOX is reachable on the same network. Use the Send to
+Device action to push books; uploads stream in 64 KB chunks with
+per-byte progress reporting and a pre-flight free-space check.
+
+Configuration: Preferences > Plugins > BooxDrop Device. Set the URL
+shown on the BOOX device's BooxDrop screen (form: http://host:port).
+
+Source: https://github.com/fmcurti/calibre-booxdrop
